@@ -73,4 +73,4 @@ encd = IV + aes.encrypt(buf)
 
 print("Sending %s bytes: %s..."%(len(encd), encd[:10]))
 
-sock.send(encd)
+sock.send(encd[:AES.block_size])

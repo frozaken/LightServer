@@ -42,12 +42,7 @@ class Server:
             threading.Thread(target=self.HandleClient,args=(clientsock, addr)).start()
 
 
-    def HandleClient(self, socket, addr):
-        blocks = b''
-
-        self.Logger.info("connected client on: %s"%(str(addr)))
-        #now recieve client key
-
+    def PerformKeyExchange(self, socket):
         clientpubkeybytes = socket.recv(120)
 
         try:
@@ -58,7 +53,7 @@ class Server:
         except ValueError:
             self.Logger.error("Recieved invalid public key, closing connection")
             socket.close()
-            return
+            return None
 
         priv = ec.generate_private_key(
             ec.SECP384R1(),
@@ -70,7 +65,7 @@ class Server:
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-        self.Logger.info("sending key %s... to %s"%(pubkey[:10],str(addr)))
+        self.Logger.info("sending key %s..."%(pubkey[:10]))
 
         socket.send(pubkey)
 
@@ -82,7 +77,7 @@ class Server:
             clientpubkey
         )
 
-        derived = HKDF(
+        return HKDF(
             algorithm = hashes.SHA256(),
             length=32,
             salt = None,
@@ -92,49 +87,70 @@ class Server:
             sharedkey
         )
 
+    def DecryptRecievedData(self, data, key):
+        IV = data[:AES.block_size]
+
+
+        if(len(data) == 0 or len(data) % AES.block_size != 0):
+            self.Logger.error("Invalid bytes recieved, closing connection")
+            return None
+
+        aes = AES.new(
+            key,
+            AES.MODE_CBC,
+            IV
+        )
+
+
+        dec_dat = aes.decrypt(data[AES.block_size:])
+
+        if(len(dec_dat) == 0):
+            self.Logger.error("Empty data after IV, closing connection")
+            return None
+
+        padding = int(dec_dat[-1])
+
+        return dec_dat[:-padding]
+
+
+    def DecodeStruct(self, structbytes, fmt):
+        if(len(structbytes) != struct.calcsize(fmt)):
+            self.Logger.error("Incorrect struct length, closing connection")
+            return None
+
+        return struct.unpack(fmt ,bytearray(structbytes))
+
+
+    def HandleClient(self, socket, addr):
+        blocks = b''
+
+        self.Logger.info("connected client on: %s"%(str(addr)))
+        #now recieve client key
+
+        derived = self.PerformKeyExchange(socket)
+
+        if not derived: return
+
         self.Logger.info("derived key: %s..."%(derived[:10]))
 
-        while True:
+
+
+        while True: #read all data
             block = socket.recv(512)
             if block == b'':
                 break
             blocks += block
 
 
-        IV = blocks[:AES.block_size]
-
-
-        if(len(blocks) == 0 or len(blocks) % AES.block_size != 0):
-            self.Logger.error("Invalid bytes recieved, closing connection")
-            socket.close()
-            return
-
-        aes = AES.new(
-            derived,
-            AES.MODE_CBC,
-            IV
-        )
-
-
-        dec_dat = aes.decrypt(blocks[AES.block_size:])
-
-        if(len(dec_dat) == 0):
-            self.Logger.error("Empty data after IV, closing connection")
-            socket.close()
-            return
-
-        padding = int(dec_dat[-1])
-
-        final = dec_dat[:-padding]
+        dec = self.DecryptRecievedData(blocks, derived)
+        
+        if not dec: socket.close(); return
 
         fmt = "!3si"
 
-        if(len(final) != struct.calcsize(fmt)):
-            socket.close()
-            self.Logger.error("Incorrect struct length, closing socket for %s"%(str(addr)))
-            return
+        tp = self.DecodeStruct(dec, fmt)
 
-        tp = struct.unpack(fmt ,bytearray(final))
+        if not tp: socket.close(); return
 
         self.Logger.info("Client %s sent %s"%(str(addr), tp))
 
