@@ -46,6 +46,19 @@ class Server:
         blocks = b''
 
         self.Logger.info("connected client on: %s"%(str(addr)))
+        #now recieve client key
+
+        clientpubkeybytes = socket.recv(120)
+
+        try:
+            clientpubkey = serialization.load_der_public_key(
+                clientpubkeybytes,
+                default_backend()
+            )
+        except ValueError:
+            self.Logger.error("Recieved invalid public key, closing connection")
+            socket.close()
+            return
 
         priv = ec.generate_private_key(
             ec.SECP384R1(),
@@ -62,14 +75,6 @@ class Server:
         socket.send(pubkey)
 
 
-        #now recieve client key
-
-        clientpubkeybytes = socket.recv(120)
-
-        clientpubkey = serialization.load_der_public_key(
-            clientpubkeybytes,
-            default_backend()
-        )
 
 
         sharedkey = priv.exchange(
@@ -98,6 +103,12 @@ class Server:
 
         IV = blocks[:AES.block_size]
 
+
+        if(len(blocks) == 0 or len(blocks) % AES.block_size != 0):
+            self.Logger.error("Invalid bytes recieved, closing connection")
+            socket.close()
+            return
+
         aes = AES.new(
             derived,
             AES.MODE_CBC,
@@ -106,6 +117,11 @@ class Server:
 
 
         dec_dat = aes.decrypt(blocks[AES.block_size:])
+
+        if(len(dec_dat) == 0):
+            self.Logger.error("Empty data after IV, closing connection")
+            socket.close()
+            return
 
         padding = int(dec_dat[-1])
 

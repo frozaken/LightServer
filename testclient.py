@@ -25,14 +25,15 @@ privkey = peer_public_key = ec.generate_private_key(
     default_backend()
 )
 
-servpubkeybytes = sock.recv(120)
-
 sock.send(
     privkey.public_key().public_bytes(
         serialization.Encoding.DER,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 )
+
+servpubkeybytes = sock.recv(120)
+
 
 servpubkey = serialization.load_der_public_key(
     servpubkeybytes,
@@ -69,8 +70,6 @@ buf += bytes([padding]) * padding
 
 print("Derived key: %s"%derived[:10])
 encd = IV + aes.encrypt(buf)
-
-print(IV)
 
 print("Sending %s bytes: %s..."%(len(encd), encd[:10]))
 
