@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import socket
 import struct 
 import array
@@ -8,6 +9,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from Crypto import Random
 from Crypto.Cipher import AES
+from hexdump import hexdump
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -68,9 +70,11 @@ padding = AES.block_size - len(buf) % AES.block_size
 
 buf += bytes([padding]) * padding
 
-print("Derived key: %s"%derived[:10])
+print("Derived key: ")
+hexdump(derived)
 encd = IV + aes.encrypt(buf)
 
-print("Sending %s bytes: %s..."%(len(encd), encd[:10]))
+print("Sending %s bytes:"%(len(encd)))
+hexdump(encd)
 
 sock.send(encd)

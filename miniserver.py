@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import socket
 import threading
 import time
@@ -10,6 +11,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from Crypto import Random
 from Crypto.Cipher import AES
+from hexdump import hexdump
 
 class Server:
     def __init__(self,host, port, concurrenctcons):
@@ -108,6 +110,9 @@ class Server:
             self.Logger.error("Empty data after IV, closing connection")
             return None
 
+        self.Logger.info("Struct with padding:")
+        hexdump(dec_dat)
+
         padding = int(dec_dat[-1])
 
         return dec_dat[:-padding]
@@ -131,8 +136,8 @@ class Server:
 
         if not derived: return
 
-        self.Logger.info("derived key: %s..."%(derived[:10]))
-
+        self.Logger.info("derived key: ")
+        hexdump(derived)
 
 
         while True: #read all data
@@ -141,6 +146,9 @@ class Server:
                 break
             blocks += block
 
+        self.Logger.info("got data: ")
+        hexdump(blocks)
+
 
         dec = self.DecryptRecievedData(blocks, derived)
         
@@ -148,11 +156,14 @@ class Server:
 
         fmt = "!3si"
 
+
+
         tp = self.DecodeStruct(dec, fmt)
 
         if not tp: socket.close(); return
 
-        self.Logger.info("Client %s sent %s"%(str(addr), tp))
+        self.Logger.info("Client %s sent: %s, with dump:"%(str(addr), tp))
+        hexdump(dec)
 
 
 if __name__ == "__main__":
