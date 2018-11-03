@@ -118,12 +118,14 @@ class Server:
         return dec_dat[:-padding]
 
 
-    def DecodeStruct(self, structbytes, fmt):
-        if(len(structbytes) != struct.calcsize(fmt)):
-            self.Logger.error("Incorrect struct length, closing connection")
-            return None
+    def DecodeStruct(self, structbytes):
+        formatlen = struct.unpack('!i',structbytes[:4])[0]
 
-        return struct.unpack(fmt ,bytearray(structbytes))
+        fmt = struct.unpack('!%ss'%formatlen,structbytes[4:4+formatlen])[0]
+
+        structsize = struct.calcsize(fmt)	
+	
+        return struct.unpack(fmt ,bytearray(structbytes[4+formatlen:]))
 
 
     def HandleClient(self, socket, addr):
@@ -154,11 +156,7 @@ class Server:
         
         if not dec: socket.close(); return
 
-        fmt = "!3si"
-
-
-
-        tp = self.DecodeStruct(dec, fmt)
+        tp = self.DecodeStruct(dec)
 
         if not tp: socket.close(); return
 
