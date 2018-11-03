@@ -161,7 +161,21 @@ class Server:
         if not tp: socket.close(); return
 
         self.Logger.info("Client %s sent: %s, with dump:"%(str(addr), tp))
-        hexdump(dec)
+        self.DetermineCommand(tp[0].decode('utf-8'))(*tp[1:])
+
+
+    def Lowerlights(self, amount):
+        print("LOWERING LIGHTS BY %s"%amount)
+
+    def TurnOffLights(self):
+        print("Turning off lights")
+
+    def DetermineCommand(self, cmdstring):
+        if cmdstring == 'low':
+            return self.Lowerlights
+        elif cmdstring == 'off':
+            return self.TurnOffLights
+            
 
 
 if __name__ == "__main__":
