@@ -160,7 +160,7 @@ class Server:
 
         if not tp: socket.close(); return
 
-        self.Logger.info("Client %s sent: %s, with dump:"%(str(addr), tp))
+        self.Logger.info("Client %s sent: %s"%(str(addr), tp))
         self.DetermineCommand(tp[0].decode('utf-8'))(*tp[1:])
 
 
