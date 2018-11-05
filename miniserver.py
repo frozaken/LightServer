@@ -13,13 +13,14 @@ from Crypto import Random
 from Crypto.Cipher import AES
 from hexdump import hexdump
 from queue import Queue
+from lightcontroller import light_controller
 
-class Server:
-    def __init__(self,host, port, concurrenctcons):
+
+class light_server:
+    def __init__(self, host, port, concurrenctcons):
         serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        serv.bind((host,port))
-
+        serv.bind((host, port))
 
         logger = logging.getLogger(__name__)
 
@@ -27,36 +28,36 @@ class Server:
 
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
-        formatter = logging.Formatter("[%(asctime)s] %(levelname)s in %(module)s: %(message)s")
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s in %(module)s: %(message)s")
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
-        self.Logger = logger
+        self.logger = logger
         self.Socket = serv
-        self.CommandQueue = Queue()
+        self.command_queue = Queue()
 
+        self.lc = light_controller('config.json')
 
         serv.listen(concurrenctcons)
 
+    def start(self):
+        self.logger.info("Listening for connections...")
 
-    def Start(self):
-        self.Logger.info("Listening for connections...")
+        threading.Thread(target=self.queue_processor, daemon=True).start()
 
-        threading.Thread(target=self.QueueProcessor).start()
-
-        while True: # listening loop
+        while True:  # listening loop
             (clientsock, addr) = self.Socket.accept()
-            threading.Thread(target=self.HandleClient,args=(clientsock, addr), daemon=True).start()
+            threading.Thread(
+                target=self.handle_client, args=(
+                    clientsock, addr), daemon=True).start()
 
-
-    def QueueProcessor(self):
+    def queue_processor(self):
         while True:
-            cmd = self.CommandQueue.get(block=True)
-            self.DetermineCommand(cmd[0].decode('utf-8'))(*cmd[1:])
+            cmd = self.command_queue.get(block=True)
+            self.determine_command(cmd[0].decode('utf-8'))(*cmd[1:])
 
-
-
-    def PerformKeyExchange(self, socket):
+    def perform_key_exchange(self, socket):
         clientpubkeybytes = socket.recv(120)
 
         try:
@@ -65,7 +66,8 @@ class Server:
                 default_backend()
             )
         except ValueError:
-            self.Logger.error("Recieved invalid public key, closing connection")
+            self.logger.error(
+                "Recieved invalid public key, closing connection")
             socket.close()
             return None
 
@@ -75,16 +77,13 @@ class Server:
         )
 
         pubkey = priv.public_key().public_bytes(
-            encoding = serialization.Encoding.DER,
+            encoding=serialization.Encoding.DER,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-        self.Logger.info("sending key %s..."%(pubkey[:10]))
+        self.logger.info("sending key %s..." % (pubkey[:10]))
 
         socket.send(pubkey)
-
-
-
 
         sharedkey = priv.exchange(
             ec.ECDH(),
@@ -92,21 +91,20 @@ class Server:
         )
 
         return HKDF(
-            algorithm = hashes.SHA256(),
+            algorithm=hashes.SHA256(),
             length=32,
-            salt = None,
-            info = b'handshake data',
-            backend = default_backend()
+            salt=None,
+            info=b'handshake data',
+            backend=default_backend()
         ).derive(
             sharedkey
         )
 
-    def DecryptRecievedData(self, data, key):
+    def decrypt_recieved_data(self, data, key):
         IV = data[:AES.block_size]
 
-
         if(len(data) == 0 or len(data) % AES.block_size != 0):
-            self.Logger.error("Invalid bytes recieved, closing connection")
+            self.logger.error("Invalid bytes recieved, closing connection")
             return None
 
         aes = AES.new(
@@ -115,82 +113,75 @@ class Server:
             IV
         )
 
-
         dec_dat = aes.decrypt(data[AES.block_size:])
 
         if(len(dec_dat) == 0):
-            self.Logger.error("Empty data after IV, closing connection")
+            self.logger.error("Empty data after IV, closing connection")
             return None
 
-        self.Logger.info("Struct with padding:")
+        self.logger.info("Struct with padding:")
         hexdump(dec_dat)
 
         padding = int(dec_dat[-1])
 
         return dec_dat[:-padding]
 
+    def decode_struct(self, structbytes):
+        formatlen = struct.unpack('!i', structbytes[:4])[0]
 
-    def DecodeStruct(self, structbytes):
-        formatlen = struct.unpack('!i',structbytes[:4])[0]
+        fmt = struct.unpack('!%ss' %
+                            formatlen, structbytes[4:4 + formatlen])[0]
 
-        fmt = struct.unpack('!%ss'%formatlen,structbytes[4:4+formatlen])[0]
+        structsize = struct.calcsize(fmt)
 
-        structsize = struct.calcsize(fmt)	
-	
-        return struct.unpack(fmt ,bytearray(structbytes[4+formatlen:]))
+        return struct.unpack(fmt, bytearray(structbytes[4 + formatlen:]))
 
-
-    def HandleClient(self, socket, addr):
+    def handle_client(self, socket, addr):
         blocks = b''
 
-        self.Logger.info("connected client on: %s"%(str(addr)))
-        #now recieve client key
+        self.logger.info("connected client on: %s" % (str(addr)))
+        # now recieve client key
 
-        derived = self.PerformKeyExchange(socket)
+        derived = self.perform_key_exchange(socket)
 
-        if not derived: return
+        if not derived:
+            return
 
-        self.Logger.info("derived key: ")
+        self.logger.info("derived key: ")
         hexdump(derived)
 
-
-        while True: #read all data
+        while True:  # read all data
             block = socket.recv(512)
             if block == b'':
                 break
             blocks += block
 
-        self.Logger.info("got data: ")
+        self.logger.info("got data: ")
         hexdump(blocks)
 
+        dec = self.decrypt_recieved_data(blocks, derived)
 
-        dec = self.DecryptRecievedData(blocks, derived)
-        
-        if not dec: socket.close(); return
+        if not dec:
+            socket.close()
+            return
 
-        tp = self.DecodeStruct(dec)
+        tp = self.decode_struct(dec)
 
-        if not tp: socket.close(); return
+        if not tp:
+            socket.close()
+            return
 
-        self.Logger.info("Client %s sent: %s"%(str(addr), tp))
+        self.logger.info("Client %s sent: %s" % (str(addr), tp))
 
-        self.CommandQueue.put(tp,block=True)
+        self.command_queue.put(tp, block=True)
 
-
-    def Lowerlights(self, amount):
-        print("LOWERING LIGHTS BY %s"%amount)
-
-    def TurnOffLights(self):
-        print("Turning off lights")
-
-    def DetermineCommand(self, cmdstring):
+    def determine_command(self, cmdstring):
         if cmdstring == 'low':
             return self.Lowerlights
         elif cmdstring == 'off':
             return self.TurnOffLights
-            
 
 
 if __name__ == "__main__":
-    serv = Server('0.0.0.0',13371,5)
-    serv.Start()
+    serv = light_server('0.0.0.0', 13371, 5)
+    serv.start()
