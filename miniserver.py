@@ -81,7 +81,7 @@ class light_server:
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-        self.logger.info("sending key %s..." % (pubkey[:10]))
+        #self.logger.info("sending key %s..." % (pubkey[:10]))
 
         socket.send(pubkey)
 
@@ -89,6 +89,8 @@ class light_server:
             ec.ECDH(),
             clientpubkey
         )
+
+
 
         return HKDF(
             algorithm=hashes.SHA256(),
@@ -98,33 +100,20 @@ class light_server:
             backend=default_backend()
         ).derive(
             sharedkey
-        )
+        ), socket.recv(AES.block_size)
 
-    def decrypt_recieved_data(self, data, key):
-        IV = data[:AES.block_size]
+    def decrypt_recieved_data(self, data, aes):
 
         if(len(data) == 0 or len(data) % AES.block_size != 0):
             self.logger.error("Invalid bytes recieved, closing connection")
             return None
 
-        aes = AES.new(
-            key,
-            AES.MODE_CBC,
-            IV
-        )
-
-        dec_dat = aes.decrypt(data[AES.block_size:])
-
-        if(len(dec_dat) == 0):
-            self.logger.error("Empty data after IV, closing connection")
-            return None
+        dec_dat = aes.decrypt(data)
 
         self.logger.info("Struct with padding:")
         hexdump(dec_dat)
 
-        padding = int(dec_dat[-1])
-
-        return dec_dat[:-padding]
+        return dec_dat
 
     def decode_struct(self, structbytes):
         formatlen = struct.unpack('!i', structbytes[:4])[0]
@@ -134,46 +123,74 @@ class light_server:
 
         structsize = struct.calcsize(fmt)
 
-        return struct.unpack(fmt, bytearray(structbytes[4 + formatlen:]))
+        return struct.unpack(fmt, bytearray(structbytes[4 + formatlen:4 + formatlen + structsize]))
 
     def handle_client(self, socket, addr):
         blocks = b''
 
         self.logger.info("connected client on: %s" % (str(addr)))
+
+        blocksize = struct.unpack("!i", socket.recv(4))[0] # get blocksize
+
+        self.logger.info("client set blocksize: %s"%blocksize)
+
+
         # now recieve client key
 
-        derived = self.perform_key_exchange(socket)
+        derived, IV = self.perform_key_exchange(socket)
+
+        #self.logger.info("Got IV: %s"%IV)
 
         if not derived:
             return
 
-        self.logger.info("derived key: ")
-        hexdump(derived)
+        aes = AES.new(
+            derived,
+            AES.MODE_CBC,
+            IV
+        )
 
-        while True:  # read all data
-            block = socket.recv(512)
-            if block == b'':
+        #self.logger.info("derived key: ")
+        #hexdump(derived)
+
+        while True:
+            #recieve 1 command at a time
+            blocks = b''
+
+            self.logger.info("expecting %s bytes"%(blocksize*AES.block_size))
+
+            blocks = socket.recv(blocksize * AES.block_size)
+            if blocks == b'':
+                self.logger.info("client disconnected early")
                 break
-            blocks += block
 
-        self.logger.info("got data: ")
-        hexdump(blocks)
+            assert len(blocks) == blocksize * AES.block_size
 
-        dec = self.decrypt_recieved_data(blocks, derived)
+            self.logger.info("got data: ")
+            hexdump(blocks)
 
-        if not dec:
-            socket.close()
-            return
 
-        tp = self.decode_struct(dec)
+            dec = self.decrypt_recieved_data(blocks, aes)
 
-        if not tp:
-            socket.close()
-            return
+            if not dec:
+                self.logger.warn("closing early")
+                socket.close()
+                return
 
-        self.logger.info("Client %s sent: %s" % (str(addr), tp))
+            tp = self.decode_struct(dec)
 
-        self.command_queue.put(tp, block=True)
+            if not tp:
+                self.logger.warn("closing early")
+                socket.close()
+                return
+
+            self.logger.info("Client %s sent: %s" % (str(addr), tp))
+
+            self.command_queue.put(tp, block=True)
+
+            self.logger.info("read command sucessfully")
+        
+        self.logger.info("closed connection sucessfully")
 
     def determine_command(self, cmdstring):
         if cmdstring == 'int':

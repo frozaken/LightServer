@@ -74,6 +74,9 @@ class light_controller:
 
         self.lights = [d for d in self.devices if d.has_light_control]
 
+        for l in self.lights:
+            print(l.__dict__)
+
         self.Logger.info("Found %s devices."%len(self.devices))
         self.Logger.info("Found %s lights."%len(self.lights))
 
@@ -90,8 +93,8 @@ class light_controller:
 
     def set_light_intensity(self, lightref, amount):
         if lightref == b'':
+            self.Logger.info("setting intensity for all lights to '%s'"%amount)
             for l in self.lights:
-                self.Logger.info("setting intensity for all lights to '%s'"%amount)
                 dim_c = l.light_control.set_dimmer(amount)
                 self.api(dim_c)
             

@@ -15,14 +15,9 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 sock.connect(('localhost', 13371))
 
+blksz = 6
 
-fmt  = "!3s0si"
-
-buf = bytearray(struct.calcsize(fmt)+4+len(fmt))
-
-struct.pack_into("!i%ss"%len(fmt),buf,0,len(fmt),fmt.encode('UTF-8'))
-
-struct.pack_into(fmt,buf,4+len(fmt),'tmp'.encode('UTF-8'),''.encode("utf-8"),330)
+sock.send(struct.pack("!i",blksz))
 
 privkey = peer_public_key = ec.generate_private_key(
     ec.SECP384R1(), 
@@ -68,15 +63,46 @@ aes = AES.new(
     IV
 )
 
-padding = AES.block_size - len(buf) % AES.block_size
 
-buf += bytes([padding]) * padding
+fmt  = "!3s0si"
+
+buf = bytearray(blksz * AES.block_size)
+
+struct.pack_into("!i%ss"%len(fmt),buf,0,len(fmt),fmt.encode('UTF-8'))
+
+struct.pack_into(fmt,buf,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),254)
+
+padding = blksz * AES.block_size - len(buf)
+
+buf += bytes([0]) * padding
 
 print("Derived key: ")
 hexdump(derived)
-encd = IV + aes.encrypt(buf)
+sock.send(IV)
+print(IV)
+encd = aes.encrypt(buf)
 
 print("Sending %s bytes:"%(len(encd)))
 hexdump(encd)
 
+print("len: %s tar: %s"%(len(encd),blksz*AES.block_size))
+
 sock.send(encd)
+
+buf = bytearray(blksz * AES.block_size)
+
+struct.pack_into("!i%ss"%len(fmt),buf,0,len(fmt),fmt.encode('UTF-8'))
+
+struct.pack_into(fmt,buf,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),0)
+
+padding = blksz * AES.block_size - len(buf)
+
+buf += bytes([0]) * padding
+encd = aes.encrypt(buf)
+print("sleeping")
+input("enter something to turn off lights again: ")
+print("sending again")
+hexdump(buf)
+sock.send(encd)
+
+sock.close()
