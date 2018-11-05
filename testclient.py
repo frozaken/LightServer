@@ -15,7 +15,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 sock.connect(('192.168.0.42', 13371))
 
-blksz = 6
+blksz = 2
 
 sock.send(struct.pack("!i",blksz))
 
@@ -91,14 +91,43 @@ padding = blksz * AES.block_size - len(bufc)
 
 bufc += bytes([0]) * padding
 
+
+buft = bytearray(blksz * AES.block_size)
+
+struct.pack_into("!i%ss"%len(fmt),buft,0,len(fmt),fmt.encode('UTF-8'))
+
+struct.pack_into(fmt,buft,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),0)
+
+padding = blksz * AES.block_size - len(buft)
+
+buft += bytes([0]) * padding
+
 while True:
-    if input("'o' to turn off, otherwise on: ") == "o":
-        encd = aes.encrypt(bufc)
-        print("Sending %s bytes:"%(len(encd)))
-        sock.send(encd)
-    else:
+    inp = input("'o' to turn off, otherwise on: ").split()
+    if len(inp) == 0:
         encd = aes.encrypt(buf)
         print("Sending %s bytes:"%(len(encd)))
         sock.send(encd)
+    elif inp[0] == "o":
+        encd = aes.encrypt(bufc)
+        print("Sending %s bytes:"%(len(encd)))
+        sock.send(encd)
+    elif inp[0] == 't':
+        buft = bytearray(blksz * AES.block_size)
+
+        struct.pack_into("!i%ss"%len(fmt),buft,0,len(fmt),fmt.encode('UTF-8'))
+
+        struct.pack_into(fmt,buft,4+len(fmt),'tmp'.encode('UTF-8'),''.encode("utf-8"),int(inp[1]))
+
+        padding = blksz * AES.block_size - len(buft)
+
+        buft += bytes([0]) * padding
+
+        enct = aes.encrypt(buft)
+
+        print("Sending %s bytes:"%(len(enct)))
+
+        sock.send(enct)
+
 
 sock.close()
