@@ -41,7 +41,7 @@ class Server:
 
         while True: # listening loop
             (clientsock, addr) = self.Socket.accept()
-            threading.Thread(target=self.HandleClient,args=(clientsock, addr)).start()
+            threading.Thread(target=self.HandleClient,args=(clientsock, addr), daemon=True).start()
 
 
     def PerformKeyExchange(self, socket):

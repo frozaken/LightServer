@@ -13,7 +13,7 @@ from hexdump import hexdump
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-sock.connect(('localhost', 13371))
+sock.connect(('192.168.0.42', 13371))
 
 
 fmt  = "!3siii"
