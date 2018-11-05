@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import hashes
 from Crypto import Random
 from Crypto.Cipher import AES
 from hexdump import hexdump
+from queue import Queue
 
 class Server:
     def __init__(self,host, port, concurrenctcons):
@@ -31,17 +32,28 @@ class Server:
         logger.addHandler(ch)
 
         self.Logger = logger
+        self.Socket = serv
+        self.CommandQueue = Queue()
+
 
         serv.listen(concurrenctcons)
 
-        self.Socket = serv
 
     def Start(self):
         self.Logger.info("Listening for connections...")
 
+        threading.Thread(target=self.QueueProcessor).start()
+
         while True: # listening loop
             (clientsock, addr) = self.Socket.accept()
             threading.Thread(target=self.HandleClient,args=(clientsock, addr), daemon=True).start()
+
+
+    def QueueProcessor(self):
+        while True:
+            cmd = self.CommandQueue.get(block=True)
+            self.DetermineCommand(cmd[0].decode('utf-8'))(*cmd[1:])
+
 
 
     def PerformKeyExchange(self, socket):
@@ -160,8 +172,23 @@ class Server:
 
         if not tp: socket.close(); return
 
-        self.Logger.info("Client %s sent: %s, with dump:"%(str(addr), tp))
-        hexdump(dec)
+        self.Logger.info("Client %s sent: %s"%(str(addr), tp))
+
+        self.CommandQueue.put(tp,block=True)
+
+
+    def Lowerlights(self, amount):
+        print("LOWERING LIGHTS BY %s"%amount)
+
+    def TurnOffLights(self):
+        print("Turning off lights")
+
+    def DetermineCommand(self, cmdstring):
+        if cmdstring == 'low':
+            return self.Lowerlights
+        elif cmdstring == 'off':
+            return self.TurnOffLights
+            
 
 
 if __name__ == "__main__":
