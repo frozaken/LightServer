@@ -7,6 +7,9 @@ from pytradfri.util import load_json, save_json
 from uuid import uuid4
 import logging
 from pprint import pprint
+import time
+
+import random
 
 class light_controller:
     def __init__(self, conf):
@@ -67,16 +70,41 @@ class light_controller:
 
         dev_cs = self.api(devices_c)
 
-        self.devices = self.api(devices_c)
+        self.devices = self.api(dev_cs)
 
         self.lights = [d for d in self.devices if d.has_light_control]
 
         self.Logger.info("Found %s devices."%len(self.devices))
         self.Logger.info("Found %s lights."%len(self.lights))
 
+    def set_random_lights(self):
+        i = 0
+        while True:
+            for l in self.lights:
+                dim_c = l.light_control.set_color_temp(random.randint(250,454))
+                int_c = l.light_control.set_dimmer(random.randint(0,254))
+                self.api(dim_c)
+                self.api(int_c)
+            i += 1
+            time.sleep(0.05)
+
+    def set_light_intensity(self, lightref, amount):
+        if lightref == b'':
+            for l in self.lights:
+                self.Logger.info("setting intensity for all lights to '%s'"%amount)
+                dim_c = l.light_control.set_dimmer(amount)
+                self.api(dim_c)
+            
+    def set_light_temperature(self,lightref, amount):
+        if lightref == b'':
+            self.Logger.info("setting temperature for all lights to '%s'"%amount)
+            for l in self.lights:
+                dim_c = l.light_control.set_color_temp(amount)
+                self.api(dim_c)
 
     def register_light_observer(self, light):
         pass
 
 if __name__ == "__main__":
     lc = light_controller("./config.json")
+    lc.set_random_lights()

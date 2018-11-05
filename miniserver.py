@@ -176,11 +176,12 @@ class light_server:
         self.command_queue.put(tp, block=True)
 
     def determine_command(self, cmdstring):
-        if cmdstring == 'low':
-            return self.Lowerlights
-        elif cmdstring == 'off':
-            return self.TurnOffLights
-
+        if cmdstring == 'int':
+            return self.lc.set_light_intensity
+        elif cmdstring == 'tmp':
+            return self.lc.set_light_temperature
+        else:
+            raise Exception("ffs")
 
 if __name__ == "__main__":
     serv = light_server('0.0.0.0', 13371, 5)

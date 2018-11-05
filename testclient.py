@@ -13,16 +13,16 @@ from hexdump import hexdump
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-sock.connect(('192.168.0.42', 13371))
+sock.connect(('localhost', 13371))
 
 
-fmt  = "!3si"
+fmt  = "!3s0si"
 
 buf = bytearray(struct.calcsize(fmt)+4+len(fmt))
 
 struct.pack_into("!i%ss"%len(fmt),buf,0,len(fmt),fmt.encode('UTF-8'))
 
-struct.pack_into(fmt,buf,4+len(fmt),'low'.encode('UTF-8'),3)
+struct.pack_into(fmt,buf,4+len(fmt),'tmp'.encode('UTF-8'),''.encode("utf-8"),330)
 
 privkey = peer_public_key = ec.generate_private_key(
     ec.SECP384R1(), 
