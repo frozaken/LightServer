@@ -13,9 +13,9 @@ from hexdump import hexdump
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-sock.connect(('localhost', 13371))
+sock.connect(('192.168.0.42', 13371))
 
-blksz = 6
+blksz = 2
 
 sock.send(struct.pack("!i",blksz))
 
@@ -80,29 +80,54 @@ print("Derived key: ")
 hexdump(derived)
 sock.send(IV)
 print(IV)
-encd = aes.encrypt(buf)
 
-print("Sending %s bytes:"%(len(encd)))
-hexdump(encd)
+bufc = bytearray(blksz * AES.block_size)
 
-print("len: %s tar: %s"%(len(encd),blksz*AES.block_size))
+struct.pack_into("!i%ss"%len(fmt),bufc,0,len(fmt),fmt.encode('UTF-8'))
 
-sock.send(encd)
+struct.pack_into(fmt,bufc,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),0)
 
-buf = bytearray(blksz * AES.block_size)
+padding = blksz * AES.block_size - len(bufc)
 
-struct.pack_into("!i%ss"%len(fmt),buf,0,len(fmt),fmt.encode('UTF-8'))
+bufc += bytes([0]) * padding
 
-struct.pack_into(fmt,buf,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),0)
 
-padding = blksz * AES.block_size - len(buf)
+buft = bytearray(blksz * AES.block_size)
 
-buf += bytes([0]) * padding
-encd = aes.encrypt(buf)
-print("sleeping")
-input("enter something to turn off lights again: ")
-print("sending again")
-hexdump(buf)
-sock.send(encd)
+struct.pack_into("!i%ss"%len(fmt),buft,0,len(fmt),fmt.encode('UTF-8'))
+
+struct.pack_into(fmt,buft,4+len(fmt),'int'.encode('UTF-8'),''.encode("utf-8"),0)
+
+padding = blksz * AES.block_size - len(buft)
+
+buft += bytes([0]) * padding
+
+while True:
+    inp = input("'o' to turn off, otherwise on: ").split()
+    if len(inp) == 0:
+        encd = aes.encrypt(buf)
+        print("Sending %s bytes:"%(len(encd)))
+        sock.send(encd)
+    elif inp[0] == "o":
+        encd = aes.encrypt(bufc)
+        print("Sending %s bytes:"%(len(encd)))
+        sock.send(encd)
+    elif inp[0] == 't':
+        buft = bytearray(blksz * AES.block_size)
+
+        struct.pack_into("!i%ss"%len(fmt),buft,0,len(fmt),fmt.encode('UTF-8'))
+
+        struct.pack_into(fmt,buft,4+len(fmt),'tmp'.encode('UTF-8'),''.encode("utf-8"),int(inp[1]))
+
+        padding = blksz * AES.block_size - len(buft)
+
+        buft += bytes([0]) * padding
+
+        enct = aes.encrypt(buft)
+
+        print("Sending %s bytes:"%(len(enct)))
+
+        sock.send(enct)
+
 
 sock.close()
