@@ -91,8 +91,7 @@ class light_server:
         )
 
 
-
-        return HKDF(
+        derivedkey = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
@@ -100,7 +99,11 @@ class light_server:
             backend=default_backend()
         ).derive(
             sharedkey
-        ), socket.recv(AES.block_size)
+        )
+
+        IV = socket.recv(AES.block_size)
+
+        return derivedkey, IV 
 
     def decrypt_recieved_data(self, data, aes):
 
