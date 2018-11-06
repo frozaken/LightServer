@@ -11,6 +11,8 @@ import time
 
 import random
 
+import os
+
 class light_controller:
     def __init__(self, conf):
 
@@ -26,9 +28,9 @@ class light_controller:
 
         self.Logger = logger
 
-        hubconf = load_json("tradfri.conf")
+        hubconf = load_json(os.path.join(os.path.dirname(os.path.realpath(__file__)),"tradfri.conf"))
 
-        with open(conf) as f:
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)),conf)) as f:
             config = json.load(f)
 
         self.hub_gateway = config['hub_gateway']
@@ -109,5 +111,5 @@ class light_controller:
         pass
 
 if __name__ == "__main__":
-    lc = light_controller("./config.json")
+    lc = light_controller("config.json")
     lc.set_random_lights()

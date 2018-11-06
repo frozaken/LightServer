@@ -2,3 +2,4 @@
 *.conf
 __pycache__/*
 *.pyc
+/lightserv
